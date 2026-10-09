@@ -306,9 +306,12 @@ const CONFIG = {
   // The day you two got together (YYYY, MM, DD, hour, minute). Month is 1-12.
   startDate: [2024, 10, 10, 12, 0],
 
-  // Optional: put an mp3 file next to index.html (e.g. "our-song.mp3")
-  // and its name here. Leave "" to hide the music button.
-  song: "",
+  // Song: put the mp3 next to index.html with exactly this name.
+  // If the file isn't there, the page just stays silent (no errors).
+  song: "lovesong.mp3",
+  // Second the song should start at (e.g. 75 = 1:15). Set it to where
+  // "however far away, I will always love you" begins in your copy.
+  songStart: 0,
 
   // Your story — swap these for your real memories.
   timeline: [
@@ -358,11 +361,12 @@ function openEnvelope() {
   if (opened) return;
   opened = true;
   envelope.classList.add("open");
+  // Start the song right on the tap — phones only allow audio from a direct tap.
+  if (audio) toggleMusic();
   setTimeout(() => {
     $("#intro").classList.add("gone");
     document.body.classList.remove("locked");
     burst(window.innerWidth / 2, window.innerHeight / 2, 80);
-    if (audio) { $("#musicBtn").classList.add("show"); toggleMusic(); }
   }, 1700);
 }
 envelope.addEventListener("click", openEnvelope);
@@ -370,12 +374,37 @@ envelope.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key ===
 
 /* ---------- music ---------- */
 let audio = null;
-if (CONFIG.song) { audio = new Audio(CONFIG.song); audio.loop = true; }
+const songStart = CONFIG.songStart || 0;
+if (CONFIG.song) {
+  audio = new Audio(CONFIG.song);
+  audio.preload = "auto";
+  audio.currentTime = songStart;
+  // Loop back to the chosen part rather than the very beginning.
+  audio.addEventListener("ended", () => { audio.currentTime = songStart; audio.play().catch(() => {}); });
+  // No file / can't play it → hide the button and stay quiet.
+  audio.addEventListener("error", () => { audio = null; $("#musicBtn").classList.remove("show"); });
+}
+let firstPlay = true;
+function fadeIn() {
+  const id = setInterval(() => {
+    if (!audio) return clearInterval(id);
+    audio.volume = Math.min(1, audio.volume + 0.05);
+    if (audio.volume >= 1) clearInterval(id);
+  }, 120);
+}
 function toggleMusic() {
   if (!audio) return;
   const btn = $("#musicBtn");
-  if (audio.paused) { audio.play().then(() => btn.classList.add("playing")).catch(() => {}); }
-  else { audio.pause(); btn.classList.remove("playing"); }
+  if (audio.paused) {
+    if (audio.currentTime < songStart) audio.currentTime = songStart;
+    const fade = firstPlay; firstPlay = false;
+    if (fade) audio.volume = 0;
+    audio.play().then(() => {
+      if (!audio) return;
+      btn.classList.add("show", "playing");
+      if (fade) fadeIn();
+    }).catch(() => { if (audio) audio.volume = 1; });
+  } else { audio.pause(); btn.classList.remove("playing"); }
 }
 $("#musicBtn").addEventListener("click", toggleMusic);
 
